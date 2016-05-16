@@ -391,9 +391,10 @@ void *TrainModelThread(void *id) {
   unsigned long long next_random = (long long)id;
   real f, g;
   clock_t now;
-  real *neu1 = (real *)calloc(layer1_size, sizeof(real));
-  real *neu1e = (real *)calloc(layer1_size, sizeof(real));
+  real *neu1 = (real *)calloc(layer1_size, sizeof(real));  //对应Xw
+  real *neu1e = (real *)calloc(layer1_size, sizeof(real)); //对应error累加量
   FILE *fi = fopen(train_file, "rb");
+  //每个线程对应一段文本
   fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET);
   while (1) {
     if (word_count - last_word_count > 10000) {
@@ -411,23 +412,27 @@ void *TrainModelThread(void *id) {
     }
     if (sentence_length == 0) {
       while (1) {
-        word = ReadWordIndex(fi);
+        word = ReadWordIndex(fi); //读一个词，返回其在词汇表的索引位置
         if (feof(fi)) break;
         if (word == -1) continue;
         word_count++;
         if (word == 0) break;
         // The subsampling randomly discards frequent words while keeping the ranking same
-        if (sample > 0) {
+        // 对高频词进行下采样，以概率p丢弃。p = 1-[sqrt(t/f(w))+t/f(w)].但仍保持排序不变
+        // 先计算ran = sqrt(t/f(w))+t/f(w)，产生(0,1)上的随机数r，如果r>ran，则丢弃。
+        if (sample > 0) { 
           real ran = (sqrt(vocab[word].cn / (sample * train_words)) + 1) * (sample * train_words) / vocab[word].cn;
           next_random = next_random * (unsigned long long)25214903917 + 11;
           if (ran < (next_random & 0xFFFF) / (real)65536) continue;
         }
         sen[sentence_length] = word;
         sentence_length++;
+        // 将1000个词当成一个句子
         if (sentence_length >= MAX_SENTENCE_LENGTH) break;
       }
       sentence_position = 0;
     }
+    // 当前线程处理单词数超过阈值
     if (feof(fi) || (word_count > train_words / num_threads)) {
       word_count_actual += word_count - last_word_count;
       local_iter--;
@@ -443,6 +448,7 @@ void *TrainModelThread(void *id) {
     for (c = 0; c < layer1_size; c++) neu1[c] = 0;
     for (c = 0; c < layer1_size; c++) neu1e[c] = 0;
     next_random = next_random * (unsigned long long)25214903917 + 11;
+	// 随机产生0-5的窗口大小
     b = next_random % window;
     if (cbow) {  //train the cbow architecture
       // in -> hidden
@@ -453,32 +459,42 @@ void *TrainModelThread(void *id) {
         if (c >= sentence_length) continue;
         last_word = sen[c];
         if (last_word == -1) continue;
+        // 上下文词进行向量加和，得到Xw
         for (c = 0; c < layer1_size; c++) neu1[c] += syn0[c + last_word * layer1_size];
         cw++;
       }
       if (cw) {
+      	// 归一化？
         for (c = 0; c < layer1_size; c++) neu1[c] /= cw;
+        // hs，采用huffman
         if (hs) for (d = 0; d < vocab[word].codelen; d++) {
           f = 0;
-          l2 = vocab[word].point[d] * layer1_size;
+          l2 = vocab[word].point[d] * layer1_size; //路径的内部节点
           // Propagate hidden -> output
-          for (c = 0; c < layer1_size; c++) f += neu1[c] * syn1[c + l2];
+          // 隐藏层到输出层，计算误差梯度
+          // neu1 对应 Xw， syn1对应内部节点的向量0
+          for (c = 0; c < layer1_size; c++) f += neu1[c] * syn1[c + l2]; //计算内积
           if (f <= -MAX_EXP) continue;
           else if (f >= MAX_EXP) continue;
-          else f = expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
+          else f = expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];//sigmoid
           // 'g' is the gradient multiplied by the learning rate
+          // 内部节点0的梯度(1-d-sigmoid(Xw·0))Xw，g为前面部分
           g = (1 - vocab[word].code[d] - f) * alpha;
+          
           // Propagate errors output -> hidden
+          // 反向传播误差，从huffman树传到隐藏层
+          // 累加的梯度更新量
           for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1[c + l2];
           // Learn weights hidden -> output
+          // 内部节点更新向量
           for (c = 0; c < layer1_size; c++) syn1[c + l2] += g * neu1[c];
         }
         // NEGATIVE SAMPLING
         if (negative > 0) for (d = 0; d < negative + 1; d++) {
           if (d == 0) {
-            target = word;
-            label = 1;
-          } else {
+            target = word; //目标词
+            label = 1;   //正样本
+          } else {//采样负样本
             next_random = next_random * (unsigned long long)25214903917 + 11;
             target = table[(next_random >> 16) % table_size];
             if (target == 0) target = next_random % (vocab_size - 1) + 1;
@@ -487,14 +503,15 @@ void *TrainModelThread(void *id) {
           }
           l2 = target * layer1_size;
           f = 0;
-          for (c = 0; c < layer1_size; c++) f += neu1[c] * syn1neg[c + l2];
+          for (c = 0; c < layer1_size; c++) f += neu1[c] * syn1neg[c + l2]; //内积
           if (f > MAX_EXP) g = (label - 1) * alpha;
           else if (f < -MAX_EXP) g = (label - 0) * alpha;
-          else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha;
-          for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1neg[c + l2];
-          for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += g * neu1[c];
+          else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha; //sigmoid
+          for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1neg[c + l2]; //累积误差梯度
+          for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += g * neu1[c];  //负样本向量更新
         }
         // hidden -> in
+    	// 更新上下文几个词语的向量。  
         for (a = b; a < window * 2 + 1 - b; a++) if (a != window) {
           c = sentence_position - window + a;
           if (c < 0) continue;
@@ -514,20 +531,20 @@ void *TrainModelThread(void *id) {
         l1 = last_word * layer1_size;
         for (c = 0; c < layer1_size; c++) neu1e[c] = 0;
         // HIERARCHICAL SOFTMAX
-        if (hs) for (d = 0; d < vocab[word].codelen; d++) {
+        if (hs) for (d = 0; d < vocab[word].codelen; d++) { //遍历叶子节点
           f = 0;
-          l2 = vocab[word].point[d] * layer1_size;
+          l2 = vocab[word].point[d] * layer1_size; //point是路径上的节点
           // Propagate hidden -> output
-          for (c = 0; c < layer1_size; c++) f += syn0[c + l1] * syn1[c + l2];
+          for (c = 0; c < layer1_size; c++) f += syn0[c + l1] * syn1[c + l2]; //内积
           if (f <= -MAX_EXP) continue;
           else if (f >= MAX_EXP) continue;
-          else f = expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
+          else f = expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]; //sigmoid
           // 'g' is the gradient multiplied by the learning rate
-          g = (1 - vocab[word].code[d] - f) * alpha;
+          g = (1 - vocab[word].code[d] - f) * alpha; //梯度一部分
           // Propagate errors output -> hidden
-          for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1[c + l2];
+          for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1[c + l2]; //隐藏层的误差
           // Learn weights hidden -> output
-          for (c = 0; c < layer1_size; c++) syn1[c + l2] += g * syn0[c + l1];
+          for (c = 0; c < layer1_size; c++) syn1[c + l2] += g * syn0[c + l1]; //更新内部节点向量
         }
         // NEGATIVE SAMPLING
         if (negative > 0) for (d = 0; d < negative + 1; d++) {
@@ -551,7 +568,7 @@ void *TrainModelThread(void *id) {
           for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += g * syn0[c + l1];
         }
         // Learn weights input -> hidden
-        for (c = 0; c < layer1_size; c++) syn0[c + l1] += neu1e[c];
+        for (c = 0; c < layer1_size; c++) syn0[c + l1] += neu1e[c]; //更新中心词向量
       }
     }
     sentence_position++;
