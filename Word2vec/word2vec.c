@@ -383,7 +383,7 @@ void InitNet() {
   }
   CreateBinaryTree();
 }
-
+// 训练模型线程：训练过程
 void *TrainModelThread(void *id) {
   long long a, b, d, cw, word, last_word, sentence_length = 0, sentence_position = 0;
   long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1];
@@ -582,10 +582,11 @@ void *TrainModelThread(void *id) {
   free(neu1e);
   pthread_exit(NULL);
 }
-
+// 训练模型
 void TrainModel() {
   long a, b, c, d;
   FILE *fo;
+  // 默认12个线程
   pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
   printf("Starting training using file %s\n", train_file);
   starting_alpha = alpha;
@@ -595,8 +596,10 @@ void TrainModel() {
   InitNet();
   if (negative > 0) InitUnigramTable();
   start = clock();
+  // 启动线程
   for (a = 0; a < num_threads; a++) pthread_create(&pt[a], NULL, TrainModelThread, (void *)a);
   for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
+  // 保存结果
   fo = fopen(output_file, "wb");
   if (classes == 0) {
     // Save the word vectors
@@ -609,28 +612,38 @@ void TrainModel() {
     }
   } else {
     // Run K-means on the word vectors
+    // 对向量进行聚类
     int clcn = classes, iter = 10, closeid;
-    int *centcn = (int *)malloc(classes * sizeof(int));
+    // 该类别的数量
+    int *centcn = (int *)malloc(classes * sizeof(int)); 
+    // 每个词对应类别
     int *cl = (int *)calloc(vocab_size, sizeof(int));
     real closev, x;
+    // 每个类的中心点
     real *cent = (real *)calloc(classes * layer1_size, sizeof(real));
+    // 初始化，每个词分配到一个类
     for (a = 0; a < vocab_size; a++) cl[a] = a % clcn;
     for (a = 0; a < iter; a++) {
+      // 中心点清零
       for (b = 0; b < clcn * layer1_size; b++) cent[b] = 0;
       for (b = 0; b < clcn; b++) centcn[b] = 1;
+      // 计算每个类别求和值
       for (c = 0; c < vocab_size; c++) {
         for (d = 0; d < layer1_size; d++) cent[layer1_size * cl[c] + d] += syn0[c * layer1_size + d];
-        centcn[cl[c]]++;
+        centcn[cl[c]]++; //对应类别的数量加1
       }
+      // 遍历所有类别
       for (b = 0; b < clcn; b++) {
         closev = 0;
         for (c = 0; c < layer1_size; c++) {
-          cent[layer1_size * b + c] /= centcn[b];
+          cent[layer1_size * b + c] /= centcn[b]; //均值
           closev += cent[layer1_size * b + c] * cent[layer1_size * b + c];
         }
         closev = sqrt(closev);
+        // 中心点归一化
         for (c = 0; c < layer1_size; c++) cent[layer1_size * b + c] /= closev;
       }
+      // 所有词重新分类
       for (c = 0; c < vocab_size; c++) {
         closev = -10;
         closeid = 0;
@@ -672,41 +685,59 @@ int main(int argc, char **argv) {
     printf("WORD VECTOR estimation toolkit v 0.1c\n\n");
     printf("Options:\n");
     printf("Parameters for training:\n");
+    // 输入文件：已分词的语料
     printf("\t-train <file>\n");
     printf("\t\tUse text data from <file> to train the model\n");
+    // 输出文件：词向量或词聚类
     printf("\t-output <file>\n");
     printf("\t\tUse <file> to save the resulting word vectors / word clusters\n");
+    // 词向量维度：默认100
     printf("\t-size <int>\n");
     printf("\t\tSet size of word vectors; default is 100\n");
+    // 窗口大小：默认5
     printf("\t-window <int>\n");
     printf("\t\tSet max skip length between words; default is 5\n");
+    // 词频阈值：默认0，对高频词随机下采样
     printf("\t-sample <float>\n");
     printf("\t\tSet threshold for occurrence of words. Those that appear with higher frequency in the training data\n");
     printf("\t\twill be randomly down-sampled; default is 1e-3, useful range is (0, 1e-5)\n");
+    // 采用层次softmax：默认0，不采用
     printf("\t-hs <int>\n");
     printf("\t\tUse Hierarchical Softmax; default is 0 (not used)\n");
+    // 采用NEG：默认5
     printf("\t-negative <int>\n");
     printf("\t\tNumber of negative examples; default is 5, common values are 3 - 10 (0 = not used)\n");
+    // 线程数：默认12
     printf("\t-threads <int>\n");
     printf("\t\tUse <int> threads (default 12)\n");
+    // 迭代数：默认5
     printf("\t-iter <int>\n");
     printf("\t\tRun more training iterations (default 5)\n");
+    // 词频最小阈值：默认5，小于阈值则丢弃
     printf("\t-min-count <int>\n");
     printf("\t\tThis will discard words that appear less than <int> times; default is 5\n");
+    // 学习率：默认是0.025(skip-gram),0.05(cbow)
     printf("\t-alpha <float>\n");
     printf("\t\tSet the starting learning rate; default is 0.025 for skip-gram and 0.05 for CBOW\n");
+    // 聚类数：默认0
     printf("\t-classes <int>\n");
     printf("\t\tOutput word classes rather than word vectors; default number of classes is 0 (vectors are written)\n");
+    // debug模式：默认2
     printf("\t-debug <int>\n");
     printf("\t\tSet the debug mode (default = 2 = more info during training)\n");
+    // 二进制存储：默认0，即保存文件时不采用二进制
     printf("\t-binary <int>\n");
     printf("\t\tSave the resulting vectors in binary moded; default is 0 (off)\n");
+    // 保存词汇表
     printf("\t-save-vocab <file>\n");
     printf("\t\tThe vocabulary will be saved to <file>\n");
+    // 读取已统计好词频的词汇表
     printf("\t-read-vocab <file>\n");
     printf("\t\tThe vocabulary will be read from <file>, not constructed from the training data\n");
+    // 采用模型：1 CBOW，0 skip-gram，默认1
     printf("\t-cbow <int>\n");
     printf("\t\tUse the continuous bag of words model; default is 1 (use 0 for skip-gram model)\n");
+    // 示例
     printf("\nExamples:\n");
     printf("./word2vec -train data.txt -output vec.txt -size 200 -window 5 -sample 1e-4 -negative 5 -hs 0 -binary 0 -cbow 1 -iter 3\n\n");
     return 0;
