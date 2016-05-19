@@ -7,4 +7,4 @@ Word2vec: word2vec.c
 Word2vec_transE:
 	$(CC) word2vec_transE.c -o word2vec_transE $(CFLAGS)
 clean:
-	rm -rf word2vec Word2vec_transE
+	rm -rf word2vec word2vec_transE

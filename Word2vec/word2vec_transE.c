@@ -15,6 +15,7 @@ using namespace std;
 #define MAX_EXP 6
 #define MAX_SENTENCE_LENGTH 1000
 #define MAX_CODE_LENGTH 40
+#define pi 3.1415926535897932384626433832795
 
 const int vocab_hash_size = 30000000;  // Maximum 30 * 0.7 = 21M words in the vocabulary
 typedef float real;                    // Precision of float numbers
@@ -33,6 +34,7 @@ int *vocab_hash;  //词汇哈希表，便于快速查找，存储每个词在词
 long long vocab_max_size = 1000, vocab_size = 0, layer1_size = 100; //向量维度
 long long train_words = 0, word_count_actual = 0, iter = 5, file_size = 0, classes = 0;
 real alpha = 0.025, starting_alpha, sample = 1e-3;
+real belta = 0.0001, gama = 0.8;
 //分别对应：词的向量，内节点的向量，负采样词的向量，sigmoid函数的近似计算表
 real *syn0, *syn1, *syn1neg, *expTable;
 
@@ -47,6 +49,29 @@ char buf[100000];
 int relation_num;
 map<string,int> relation2id;
 map<int,vector<pair<int,int> > > triplets;
+vector<vector<double> > relation_vec; // 关系向量
+
+// 随机数
+double rand(double min, double max)
+{
+    return min + (max-min)*rand()/(RAND_MAX + 1.0);
+}
+// 正态分布
+double normal(double x, double miu,double sigma)
+{
+    return 1.0/sqrt(2*pi)/sigma*exp(-1*(x-miu)*(x-miu)/(2*sigma*sigma));
+}
+// 在[min,max]区间内做正态分布采样？
+double randn(double miu,double sigma, double min ,double max)
+{
+    double x,y,dScope;
+    do{
+        x=rand(min,max);
+        y=normal(x,miu,sigma);
+        dScope=rand(0.0,normal(miu,miu,sigma));
+    }while(dScope>y);
+    return x;
+}
 
 //负采样算法：带权采样思想。每个词的权重为l(w) = [counter(w)]^(3/4) / sum([counter(u)]^(3/4))，u属于词典D
 //  每个词对应一个线段, 将[0,1]等距离划分成10^8，每次生成一个随机整数r，Table[r]就是一个样本。
@@ -319,41 +344,41 @@ void ReadTriplets() {
     int len = 0;
     int i = 0,j = 0;
     relation_num = 0;
-    cout << "Loading triplets..." << endl;
-    while (!feof(f_kb))
-    {
+    int bingo_num = 0;
+    int pass_num = 0;
+    while (!feof(f_kb)) {
         fgets(buf,20480,f_kb);
         sscanf(buf,"%[^\t]\t%[^\t]\t%[^\t\n]\n", buf1,buf2,buf3);
         string s1=buf1;
         string s2=buf3;
         string s3=buf2; //relation
         len = s1.length();
-        
-        free(word);
         word = (char *)malloc((len+1)*sizeof(char));
         //cout << s1 << " " << s3 << " " << s2 << endl;
         s1.copy(word,len,0);
         i = SearchVocab(word);
 	    if (i == -1) {
-	      cout<<"miss head entity:"<<s1<<endl;
-	      continue;
+	      	//cout<<"miss head entity:"<<s1<<endl;
+	      	pass_num += 1;
+	      	continue;
+	    }else {
+	    	bingo_num += 1;
 	    }
 	    len = s2.length();
-	    free(word);
 	    word = (char *)malloc((len+1)*sizeof(char));
 	    s2.copy(word,len,0);
         j = SearchVocab(word);
 	    if (j == -1) {
-	      cout<<"miss tail entity:"<<s2<<endl;
+	      //cout<<"miss tail entity:"<<s2<<endl;
 	      continue;
 	    }
-        if (relation2id.count(s3)==0)
-        {
+        if (relation2id.count(s3)==0) {
             relation2id[s3] = relation_num;
             relation_num++;
         }
-        triplets[i].push_back(make_pair(relation_num,j));
+        triplets[i].push_back(make_pair(relation2id[s3],j));
     }
+    //printf("relation_num: %d\t bingo_num: %d\t pass_num:%d\n", relation_num,bingo_num,pass_num);
 }
 
 // 保存词汇表
@@ -417,6 +442,15 @@ void InitNet() {
     syn0[a * layer1_size + b] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / layer1_size;
   }
   //CreateBinaryTree();
+  // 关系向量初始化
+  relation_vec.resize(relation_num);
+  for (int i=0; i<relation_vec.size(); i++)
+  	relation_vec[i].resize(layer1_size);
+  for (int i=0; i<relation_num; i++)
+  {
+    for (int ii=0; ii<layer1_size; ii++)
+       relation_vec[i][ii] = randn(0,1.0/layer1_size,-6/sqrt(layer1_size),6/sqrt(layer1_size));
+  }
 }
 
 // 训练模型线程：训练过程
@@ -427,14 +461,14 @@ void *TrainModelThread(void *id) {
   unsigned long long next_random = (long long)id;
   real f, g;
   clock_t now;
-  real *waddr = (real *)calloc(layer1_size, sizeof(real));  //对应Xw
+  real *waddr = (real *)calloc(layer1_size, sizeof(real));  //对应wi+r
   real *neu1 = (real *)calloc(layer1_size, sizeof(real));  //对应Xw
   real *neu1e = (real *)calloc(layer1_size, sizeof(real)); //对应error累加量
   FILE *fi = fopen(train_file, "rb");
   //每个线程对应一段文本
   fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET);
   while (1) {
-    if (word_count - last_word_count > 10000) {
+    if (word_count - last_word_count > 1000) {
       word_count_actual += word_count - last_word_count;
       last_word_count = word_count;
       if ((debug_mode > 1)) {
@@ -518,7 +552,7 @@ void *TrainModelThread(void *id) {
           }
           l2 = target * layer1_size;
           f = 0;
-          for (c = 0; c < layer1_size; c++) waddr[c] = neu1[c]
+          for (c = 0; c < layer1_size; c++) waddr[c] = neu1[c];
           for (c = 0; c < layer1_size; c++) f += neu1[c] * syn1neg[c + l2]; //内积
           if (f > MAX_EXP) g = (label - 1) * alpha;
           else if (f < -MAX_EXP) g = (label - 0) * alpha;
@@ -544,8 +578,8 @@ void *TrainModelThread(void *id) {
     	{
     		int rid = triplets[word][i].first;
     		int t = triplets[word][i].second;
-    		for (c = 0; c < layer1_size; c++) neu1e[c] = 0; //
-    		for (c = 0; c < layer1_size; c++) waddr[c] = syn0[c + word * layer1_size] + relation2vec[rid][c];
+    		for (c = 0; c < layer1_size; c++) neu1e[c] = 0; //梯度向量清零
+    		for (c = 0; c < layer1_size; c++) waddr[c] = syn0[c + word * layer1_size] + relation_vec[rid][c]; // Vwi + Vr
 	    	for (d = 0; i < negative + 1; ++d) 
 	    	{
 		    	 if (d == 0) {
@@ -556,19 +590,21 @@ void *TrainModelThread(void *id) {
 		            next_random = next_random * (unsigned long long)25214903917 + 11;
 		            target = table[(next_random >> 16) % table_size];
 		            if (target == 0) target = next_random % (vocab_size - 1) + 1;
-		            if (target == word) continue;
+		            if (target == t) continue; //与t不同
 		            label = 0;
 	          	}
 	          	l2 = target * layer1_size;
 	          	
           		f = 0;
-          		for (c = 0; c < layer1_size; c++) f += neu1[c] * syn1neg[c + l2]; //内积
-          		if (f > MAX_EXP) g = (label - 1) * alpha;
-          		else if (f < -MAX_EXP) g = (label - 0) * alpha;
-          		else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha; //sigmoid
+          		for (c = 0; c < layer1_size; c++) f += waddr[c] * syn1neg[c + l2]; //内积
+          		if (f > MAX_EXP) g = (label - 1) * belta;
+          		else if (f < -MAX_EXP) g = (label - 0) * belta;
+          		else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * belta; //sigmoid
           		for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1neg[c + l2]; //累积误差梯度
-          		for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += g * neu1[c];  //负样本向量更新
+          		for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += gama* g * waddr[c];  //负样本向量更新
 	    	}
+	    	for (c = 0; c < layer1_size; c++) syn0[c + word * layer1_size] += gama * g * neu1e[c];  //更新当前词wi
+	    	for (c = 0; c < layer1_size; c++) relation_vec[rid][c] += gama * g * neu1e[c];  //更新r向量
 	    }
       }
     }
@@ -595,6 +631,7 @@ void TrainModel() {
   if (read_vocab_file[0] != 0) ReadVocab(); else LearnVocabFromTrainFile();
   if (save_vocab_file[0] != 0) SaveVocab();
   if (output_file[0] == 0) return;
+  ReadTriplets();
   InitNet();
   if (negative > 0) InitUnigramTable();
   start = clock();
