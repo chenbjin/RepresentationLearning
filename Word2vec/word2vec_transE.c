@@ -389,7 +389,8 @@ void ReadVocab() {
 }
 
 void ReadTriplets() {
-    FILE* f_kb = fopen("./data/triplets.txt","r");
+    cout <<"reading triplets" << endl;
+    FILE* f_kb = fopen("./data/high_freq_triplets.txt","r");
     char buf3[40960];
     char buf2[40960];
     char buf1[40960];
@@ -398,7 +399,6 @@ void ReadTriplets() {
     int i = 0,j = 0;
     relation_num = 0;
     int bingo_num = 0;
-    int pass_num = 0;
     while (!feof(f_kb)) {
         fgets(buf,20480,f_kb);
         sscanf(buf,"%[^\t]\t%[^\t]\t%[^\t\n]\n", buf1,buf2,buf3);
@@ -412,10 +412,10 @@ void ReadTriplets() {
         i = SearchVocab(word);
         if (i == -1) {
             //cout<<"miss head entity:"<<s1<<endl;
-            pass_num += 1;
+            //pass_num += 1;
             continue;
         }else {
-          bingo_num += 1;
+          //bingo_num += 1;
         }
         len = s2.length();
         word = (char *)malloc((len+1)*sizeof(char));
@@ -430,8 +430,9 @@ void ReadTriplets() {
             relation_num++;
         }
         triplets[i].push_back(make_pair(relation2id[s3],j));
+        bingo_num += 1;
     }
-    printf("relation_num: %d\t bingo_num: %d\t pass_num:%d\n", relation_num,bingo_num,pass_num);
+    printf("relation_num: %d\t bingo_num: %d\n", relation_num,bingo_num);
 }
 
 // 初始化网络结构
@@ -480,7 +481,6 @@ void *TrainModelThread(void *id) {
   unsigned long long next_random = (long long)id;
   real f, g;
   clock_t now;
-  long long pp;
   real *waddr = (real *)calloc(layer1_size, sizeof(real));  //对应wi+r
   real *neu1 = (real *)calloc(layer1_size, sizeof(real));  //对应Xw
   real *neu1e = (real *)calloc(layer1_size, sizeof(real)); //对应error累加量
@@ -616,7 +616,6 @@ void *TrainModelThread(void *id) {
         // wi向量syn0[word*layer1_size] , r向量
         // @chenbingjin 2016-05-17
 
-       // ??是否在这里出问题了，size=0是初始化值吗
        // printf("word: %d \tsize: %d\n", word, triplets[word].size());
         if(triplets[word].size() > 0) for (int i = 0; i < triplets[word].size(); ++i)
         {
