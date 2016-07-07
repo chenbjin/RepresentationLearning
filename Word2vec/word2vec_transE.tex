@@ -1,0 +1,51 @@
+% word2vc_transE.tex
+% @chenbingjin 2016-07-07
+
+\documentclass[10pt]{article}
+\usepackage{caption}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\begin{document}
+\begin{algorithm}
+  \caption{ word2vec\_transE training algorithm}
+  \textbf{Input:} corpus \textbf{C}, vector dimension \textbf{k}, triplets \textbf{R}\\
+  \textbf{Output:} word vector \textbf{V}, relation vector \textbf{P}
+  \begin{algorithmic}[1]
+    \Procedure {w2v\_transE\_Train}{$C$, $k$}
+    \State $vocab\_size \leftarrow get\_vocab\_size(C)$
+    \State $relation\_size \leftarrow get\_relation\_size(R)$  //read triplets
+    \State $V \leftarrow init\_vector(vocab\_size,k)$
+    \State $\theta \leftarrow init\_vector(vocab\_size,k)$
+    \State $P \leftarrow init\_vector(relation\_size,k)$ //init relation vector
+    \ForAll {$w_{i} \in C$}
+    		\State // word2vec model training
+    		\State $e \leftarrow 0$
+    		\State $X_w \leftarrow \sum_{u \in Context(w_i)} V(u)$
+    		\ForAll { $u = \{w_i\} \cup NEG(w_i)$} 
+    			\State $q \leftarrow \sigma(X_{w_i}^T\theta^u)$
+    			\State $g \leftarrow \eta(L^{w_i}(u)-q)$
+    			\State $e \leftarrow e+g\theta^u $
+    			\State $\theta^u \leftarrow \theta^u + gX_w$
+    		\EndFor
+    		\ForAll { $ u \in Context(w_i) $ }
+			\State $V(u) \leftarrow V(u) + e$    		
+    		\EndFor
+    		\State // transE model training
+    		\ForAll {$r \in R_{w_i} $}
+    			\State $e \leftarrow 0$
+    			\State $(w_i,r,t) \leftarrow get\_triplet(R,w_i,r)$ $//get\ triplet(w_i,r,t)$
+    			\ForAll {$u = \{t\} \cup NEG(w_i,r) $}
+    			\State $ X_{w_i+r} \leftarrow V(w_i)+ P(r)$
+    			\State $q \leftarrow \sigma(X_{w_i+r}^T\theta^u)$
+    			\State $g \leftarrow \mu (L^t(u)-q)$
+    			\State $e \leftarrow e+g\theta^u $
+    			\State $\theta^u \leftarrow \theta^u + gX_{w_i+r}$
+    			\EndFor
+    			\State $V(w_i) \leftarrow V(w_i) + e$
+    			\State $P(r) \leftarrow P(r) + e$
+    		\EndFor
+    \EndFor
+    \EndProcedure
+  \end{algorithmic}
+\end{algorithm}
+\end{document}

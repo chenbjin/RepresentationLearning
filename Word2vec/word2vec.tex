@@ -1,0 +1,34 @@
+% word2vc.tex
+% @chenbingjin 2016-07-07
+
+\documentclass[10pt]{article}
+\usepackage{caption}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\begin{document}
+\begin{algorithm}
+  \caption{ word2vec training algorithm}
+  \textbf{Input:} corpus \textbf{C}, vector dimension \textbf{k}\\
+  \textbf{Output:} word vector \textbf{V}
+  \begin{algorithmic}[1]
+    \Procedure {w2v\_Train}{$C$, $k$}
+    \State $vocab\_size \leftarrow get\_vocab\_size(C)$
+    \State $V \leftarrow init\_vector(vocab\_size,k)$
+    \State $\theta \leftarrow init\_vector(vocab\_size,k)$
+    \ForAll {$w_{i} \in C$}
+    		\State $e \leftarrow 0$
+    		\State $X_w \leftarrow \sum_{u \in Context(w_i)} V(u)$
+    		\ForAll { $u = \{w_i\} \cup NEG(w_i)$} 
+    			\State $q \leftarrow \sigma(X_{w_i}^T\theta^u)$
+    			\State $g \leftarrow \eta(L^{w_i}(u)-q)$
+    			\State $e \leftarrow e+g\theta^u $
+    			\State $\theta^u \leftarrow \theta^u + gX_w$
+    		\EndFor
+    		\ForAll { $ u \in Context(w_i) $ }
+			\State $V(u) \leftarrow V(u) + e$    		
+    		\EndFor
+    \EndFor
+    \EndProcedure
+  \end{algorithmic}
+\end{algorithm}
+\end{document}
