@@ -508,7 +508,7 @@ void *TrainModelThread(void *id) {
           else if (f < -MAX_EXP) g = (label - 0) * alpha;
           else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha; //sigmoid
           for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1neg[c + l2]; //累积误差梯度
-          for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += g * neu1[c];  //负样本向量更新
+          for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += g * neu1[c];  //参数向量更新
         }
         // hidden -> in
     	// 更新上下文几个词语的向量。  
