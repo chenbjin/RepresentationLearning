@@ -599,7 +599,7 @@ void *TrainModelThread(void *id) {
           else if (f < -MAX_EXP) g = (label - 0) * alpha;
           else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha; //sigmoid
           for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1neg[c + l2]; //累积误差梯度
-          for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += g * neu1[c];  //负样本向量更新
+          for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += g * neu1[c];  //参数向量更新
         }
         // hidden -> in
     	  // 更新上下文几个词语的向量。  
@@ -647,7 +647,7 @@ void *TrainModelThread(void *id) {
                 else if (f < -MAX_EXP) g = (label - 0) * belta;
                 else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * belta; //sigmoid
                 for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1neg[c + l2]; //累积误差梯度
-                for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += gama* g * waddr[c];  //负样本向量更新
+                for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += gama* g * waddr[c];  //参数向量更新
           }
           for (c = 0; c < layer1_size; c++) syn0[c + word * layer1_size] += gama * g * neu1e[c];  //更新当前词wi
           for (c = 0; c < layer1_size; c++) relation_vec[rid][c] += gama * g * neu1e[c];  //更新r向量
