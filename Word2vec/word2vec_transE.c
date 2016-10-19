@@ -42,7 +42,7 @@ struct vocab_word {
   char *word, *code, codelen; //（词，对应huffman编码，编码长度）
 };
 
-char train_file[MAX_STRING], output_file[MAX_STRING];
+char train_file[MAX_STRING], triplet_file[MAX_STRING], output_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
 struct vocab_word *vocab; //词汇表
 int binary = 0, cbow = 1, debug_mode = 2, window = 5, min_count = 5, num_threads = 12, min_reduce = 1;
@@ -390,7 +390,7 @@ void ReadVocab() {
 
 void ReadTriplets() {
     cout <<"reading triplets" << endl;
-    FILE* f_kb = fopen("./data/high_freq_triplets.txt","r");
+    FILE* f_kb = fopen(triplet_file,"r");
     char buf3[40960];
     char buf2[40960];
     char buf1[40960];
@@ -830,7 +830,10 @@ int main(int argc, char **argv) {
     // 输入文件：已分词的语料
     printf("\t-train <file>\n");
     printf("\t\tUse text data from <file> to train the model\n");
-    // 输出文件：词向量或词聚类
+    // 输入文件：三元组语料
+    printf("\t-triplet <file>\n");
+    printf("\t\tUse triplets data from <file> to train the model\n");
+	// 输出文件：词向量或词聚类
     printf("\t-output <file>\n");
     printf("\t\tUse <file> to save the resulting word vectors / word clusters\n");
     // 词向量维度：默认100
@@ -881,7 +884,7 @@ int main(int argc, char **argv) {
     printf("\t\tUse the continuous bag of words model; default is 1 (use 0 for skip-gram model)\n");
     // 示例
     printf("\nExamples:\n");
-    printf("./word2vec -train data.txt -output vec.txt -size 200 -window 5 -sample 1e-4 -negative 5 -hs 0 -binary 0 -cbow 1 -iter 3\n\n");
+    printf("./word2vec -train data.txt -triplet triplets.txt -output vec.txt -size 200 -window 5 -sample 1e-4 -negative 5 -hs 0 -binary 0 -cbow 1 -iter 3\n\n");
     return 0;
   }
   output_file[0] = 0;
@@ -889,6 +892,7 @@ int main(int argc, char **argv) {
   read_vocab_file[0] = 0;
   if ((i = ArgPos((char *)"-size", argc, argv)) > 0) layer1_size = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-train", argc, argv)) > 0) strcpy(train_file, argv[i + 1]);
+  if ((i = ArgPos((char *)"-triplet", argc, argv)) > 0) strcpy(triplet_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-save-vocab", argc, argv)) > 0) strcpy(save_vocab_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-read-vocab", argc, argv)) > 0) strcpy(read_vocab_file, argv[i + 1]);
   if ((i = ArgPos((char *)"-debug", argc, argv)) > 0) debug_mode = atoi(argv[i + 1]);
@@ -905,6 +909,7 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-iter", argc, argv)) > 0) iter = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-classes", argc, argv)) > 0) classes = atoi(argv[i + 1]);
+  //cout << triplet_file << endl;
   vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
   vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
   expTable = (real *)malloc((EXP_TABLE_SIZE + 1) * sizeof(real));
