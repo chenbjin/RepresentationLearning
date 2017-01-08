@@ -464,7 +464,7 @@ void *TrainModelThread(void *id) {
         cw++;
       }
       if (cw) {
-      	// 归一化？
+      	// average 向量和取平均
         for (c = 0; c < layer1_size; c++) neu1[c] /= cw;
         // hs，采用huffman
         if (hs) for (d = 0; d < vocab[word].codelen; d++) {
@@ -522,6 +522,7 @@ void *TrainModelThread(void *id) {
         }
       }
     } else {  //train skip-gram
+      //这里很神奇，利用了目标函数的对称性，p(u|w) = p(w|u), u in Context(w). 具体看 http://blog.csdn.net/mytestmy/article/details/26969149
       for (a = b; a < window * 2 + 1 - b; a++) if (a != window) {
         c = sentence_position - window + a;
         if (c < 0) continue;
@@ -568,7 +569,7 @@ void *TrainModelThread(void *id) {
           for (c = 0; c < layer1_size; c++) syn1neg[c + l2] += g * syn0[c + l1];
         }
         // Learn weights input -> hidden
-        for (c = 0; c < layer1_size; c++) syn0[c + l1] += neu1e[c]; //更新中心词向量
+        for (c = 0; c < layer1_size; c++) syn0[c + l1] += neu1e[c]; //更新的是当前上下文的词向量
       }
     }
     sentence_position++;
