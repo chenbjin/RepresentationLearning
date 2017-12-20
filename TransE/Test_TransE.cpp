@@ -265,7 +265,6 @@ void prepare()
         string st=buf;
         entity2id[st]=x;
         id2entity[x]=st;
-        mid2type[st]="None";
         entity_num++;
     }
     while (!feof(f2))
