@@ -1,10 +1,15 @@
 CC = g++
+#CC = gcc
 #Using -Ofast instead of -O3 might result in faster code, but is supported only by newer GCC versions
 CFLAGS = -lm -pthread -Ofast -march=native -Wall -funroll-loops -Wno-unused-result
-all: Word2vec Word2vec_transE
+all: Word2vec Word2vec_transE Distance BinaryTrans
 Word2vec: word2vec.c
 	$(CC) word2vec.c -o word2vec $(CFLAGS)
 Word2vec_transE: word2vec_transE.c
 	$(CC) word2vec_transE.c -o word2vec_transE $(CFLAGS)
+Distance: distance.c
+	$(CC) distance.c -o distance $(CFLAGS)
+BinaryTrans: binary_translation.c
+	$(CC) binary_translation.c -o binary_translation $(CFLAGS)
 clean:
-	rm -rf word2vec word2vec_transE
+	rm -rf word2vec word2vec_transE distance binary_translation
