@@ -12,4 +12,8 @@
 	
     word2vec_transE.c: 在训练Word2vec时，加入三元组信息，使得词向量训练更加充分
     
-    stopwords.txt: 停用词 
+    stopwords.txt: 停用词
+
+**UPDATE**
+
+Check the new version of it, [LRWE](https://github.com/chenbjin/LRCWE)
